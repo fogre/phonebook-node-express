@@ -15,16 +15,22 @@ app.use(cors())
 app.use(
 	morgan(':method :url :status :res[content-length] - :response-time ms :postReq')
 )
+app.use(express.static('build'))
 
 app.get('/', (req, res) => {
-  res.send('<h1>Go to /api/persons to view the phonebook</h1>')
+  const date = new Date()
+  res.send(`
+    <h1>Phonebook API</h1>
+    <p>Go to /api/persons to view the Phonebook</p>
+    <br/>
+    <p>Phonebook has ${phonebook.length} persons information<p>${date}`
+  )
 })
 
 app.get('/api/info', (req, res) => {
 	const count = phonebook.length
 	const date = new Date()
-	res.send(`<p>Phonebook has ${count} persons information<p><br/>${date}`)
-	res.send(date)
+	res.send(`<p>Phonebook has ${count} persons information<p>${date}`)
 })
 
 app.get('/api/persons', (req, res) => {
