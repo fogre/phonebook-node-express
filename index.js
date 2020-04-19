@@ -1,89 +1,101 @@
+require('dotenv').config()
 const cors = require('cors')
 const express = require('express')
 const morgan = require('morgan')
-const persons = require('./persons.js')
+const Person = require('./models/person.js')
 
 const app = express()
-let phonebook = persons.persons
+
+app.use(cors())
+app.use(express.static('build'))
+app.use(express.json())
 
 morgan.token('postReq', (req, res) => {
-	if (req.body.name) return JSON.stringify(req.body)
+  if (req.body.name) return JSON.stringify(req.body)
 })
-
-app.use(express.json())
-app.use(cors())
 app.use(
-	morgan(':method :url :status :res[content-length] - :response-time ms :postReq')
+  morgan(':method :url :status :res[content-length] - :response-time ms :postReq')
 )
-app.use(express.static('build'))
-
-app.get('/', (req, res) => {
-  const date = new Date()
-  res.send(`
-    <h1>Phonebook API</h1>
-    <p>Go to /api/persons to view the Phonebook</p>
-    <br/>
-    <p>Phonebook has ${phonebook.length} persons information<p>${date}`
-  )
-})
 
 app.get('/api/info', (req, res) => {
-	const count = phonebook.length
-	const date = new Date()
-	res.send(`<p>Phonebook has ${count} persons information<p>${date}`)
+  Person.find({}).then(persons => {
+    const date = new Date()
+    res.send(`<p>Phonebook has ${persons.length} persons information<p>${date}`)
+  })
 })
 
-app.get('/api/persons', (req, res) => {
-	res.json(phonebook)
+app.get('/api/persons', (req, res, next) => {
+	Person.find({}).then(persons => {
+    res.json(persons)
+  })
 })
 
-app.get('/api/persons/:id', (req, res) => {
-	const id = Number(req.params.id)
-	const person = phonebook.find(pers => pers.id === id)
-  if (person) {
-    res.json(person)
-  } else {
-    res.status(404).end()
+app.get('/api/persons/:id', (req, res, next) => {
+	Person.findById(req.params.id)
+    .then(person => {
+      if (person) {
+        res.json(person.toJSON())
+      } else {
+        res.status(404).end()
+      }  
+    })
+    .catch(error => next(error))
+})
+
+app.delete('/api/persons/:id', (req, res, next) => { 
+	Person.findByIdAndRemove(req.params.id)
+    .then(result => {
+      res.status(204).end()
+    })
+    .catch(error => next(error))
+})
+
+app.post('/api/persons', (req, res, next) => {
+  const body = req.body
+  const person = new Person({
+    name: body.name,
+    number: body.number
+  })
+
+  person.save()
+    .then(savedPerson => {
+      res.json(savedPerson.toJSON())
+    })
+    .catch(error => next(error))
+})
+
+app.put('/api/persons/:id', (req, res, next) => {
+  const body = req.body;
+  const person = {
+    name: body.name,
+    number: body.number
   }
+
+  Person.findByIdAndUpdate(req.params.id, person, {new : true})
+    .then(updatedPerson => {
+      res.json(updatedPerson.toJSON())
+    })
+    .catch(error => next(error))
 })
 
-app.delete('/api/persons/:id', (req, res) => { 
-	const id = Number(req.params.id)
-	phonebook = phonebook.filter(person => person.id !== id)
-  res.status(204).end()
-})
-
-app.post('/api/persons', (req, res) => {
-  const person = req.body
-  
-  if (!person.name )
-    return res.status(400).json({
-    	error: 'name is required'
-    })
-
-  if (!person.number) 
-    return res.status(400).json({
-    	error: 'number is required'
-    })
-
-  if (phonebook.some(pers => pers.name === person.name))
-  	return res.status(400).json({
-    	error: `${person.name} already exists`
-    })
- 
-	const maxId = phonebook.length
-    ? Math.max(...phonebook.map(n => n.id))
-    : 0
-  person.id = Number(maxId)+1
-  res.json(person)
-})
-
-const unknownEndpoint = (request, response) => {
-  response.status(404).send({ error: 'unknown endpoint' })
+const unknownEndpoint = (req, res) => {
+  res.status(404).send({ error: 'unknown endpoint' })
 }
 app.use(unknownEndpoint)
 
-const PORT = process.env.PORT || 3001
+const errorHandler = (error, req, res, next) => {
+  console.error(error.message)
+
+  if (error.name === 'CastError') 
+    return res.status(400).send({ error: 'malformatted id' })
+  else if (error.name === 'ValidationError')
+    return res.status(400).json({ error: error.message })
+
+  next(error)
+}
+app.use(errorHandler)
+
+const PORT = process.env.PORT
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`)
 })
