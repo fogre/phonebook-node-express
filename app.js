@@ -1,101 +1,32 @@
-require('dotenv').config()
-const cors = require('cors')
+const config = require('./utils/config')
 const express = require('express')
-const morgan = require('morgan')
-const Person = require('./models/person.js')
-
 const app = express()
+const cors = require('cors')
+const logger = require('./utils/logger')
+const middleware = require('./utils/middleware')
+const personsRouter = require('./controllers/persons')
+const mongoose = require('mongoose')
+
+console.log('connecting to', config.MONGODB_URI)
+mongoose.connect(config.MONGODB_URI, { 
+  useFindAndModify: false, 
+  useCreateIndex: true, 
+  useNewUrlParser: true, 
+  useUnifiedTopology: true 
+})
+  .then(result => {
+    logger.info('connected to MongoDB')
+  })
+  .catch((error) => {
+    logger.error('error connection to MongoDB:', error.message)
+  })
 
 app.use(cors())
 app.use(express.static('build'))
 app.use(express.json())
+app.use(middleware.requestLogger)
+app.use('/api/persons', personsRouter)
+app.use(middleware.unknownEndpoint)
+app.use(middleware.errorHandler)
 
-morgan.token('postReq', (req, res) => {
-  if (req.body.name) return JSON.stringify(req.body)
-})
-app.use(
-  morgan(':method :url :status :res[content-length] - :response-time ms :postReq')
-)
-
-app.get('/api/info', (req, res) => {
-  Person.find({}).then(persons => {
-    const date = new Date()
-    res.send(`<p>Phonebook has ${persons.length} persons information<p>${date}`)
-  })
-})
-
-app.get('/api/persons', (req, res, next) => {
-	Person.find({}).then(persons => {
-    res.json(persons)
-  })
-})
-
-app.get('/api/persons/:id', (req, res, next) => {
-	Person.findById(req.params.id)
-    .then(person => {
-      if (person) {
-        res.json(person.toJSON())
-      } else {
-        res.status(404).end()
-      }  
-    })
-    .catch(error => next(error))
-})
-
-app.delete('/api/persons/:id', (req, res, next) => { 
-	Person.findByIdAndRemove(req.params.id)
-    .then(result => {
-      res.status(204).end()
-    })
-    .catch(error => next(error))
-})
-
-app.post('/api/persons', (req, res, next) => {
-  const body = req.body
-  const person = new Person({
-    name: body.name,
-    number: body.number
-  })
-
-  person.save()
-    .then(savedPerson => {
-      res.json(savedPerson.toJSON())
-    })
-    .catch(error => next(error))
-})
-
-app.put('/api/persons/:id', (req, res, next) => {
-  const body = req.body;
-  const person = {
-    name: body.name,
-    number: body.number
-  }
-
-  Person.findByIdAndUpdate(req.params.id, person, {new : true})
-    .then(updatedPerson => {
-      res.json(updatedPerson.toJSON())
-    })
-    .catch(error => next(error))
-})
-
-const unknownEndpoint = (req, res) => {
-  res.status(404).send({ error: 'unknown endpoint' })
-}
-app.use(unknownEndpoint)
-
-const errorHandler = (error, req, res, next) => {
-  console.error(error.message)
-
-  if (error.name === 'CastError') 
-    return res.status(400).send({ error: 'malformatted id' })
-  else if (error.name === 'ValidationError')
-    return res.status(400).json({ error: error.message })
-
-  next(error)
-}
-app.use(errorHandler)
-
-const PORT = process.env.PORT
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`)
-})
+module.exports = app
