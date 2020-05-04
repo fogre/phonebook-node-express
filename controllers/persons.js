@@ -42,7 +42,7 @@ personsRouter.post('/', (req, res, next) => {
 })
 
 personsRouter.put('/:id', (req, res, next) => {
-  const body = req.body;
+  const body = req.body
   const person = {
     name: body.name,
     number: body.number
